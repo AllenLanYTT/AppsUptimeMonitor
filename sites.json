@@ -1,0 +1,17 @@
+[
+  {
+    "label": "GitHub",
+    "url": "https://github.com",
+    "comment": "Source control and CI platform"
+  },
+  {
+    "label": "Microsoft",
+    "url": "https://www.microsoft.com",
+    "comment": "Main corporate website"
+  },
+  {
+    "label": "Cloudflare",
+    "url": "https://www.cloudflare.com",
+    "comment": "Network and edge services"
+  }
+]
