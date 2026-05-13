@@ -5,6 +5,10 @@ const REQUEST_TIMEOUT_MS = 8000;
 
 const PROXY_PROVIDERS = [
   {
+    name: "Direct",
+    buildUrl: (targetUrl) => targetUrl
+  },
+  {
     name: "AllOrigins",
     buildUrl: (targetUrl) => `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
   },
