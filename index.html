@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Monitor website uptime from a static dashboard.">
+  <title>Site Pulse Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="bg-orb bg-orb-a" aria-hidden="true"></div>
+  <div class="bg-orb bg-orb-b" aria-hidden="true"></div>
+
+  <main class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Frontend-only monitor</p>
+        <h1>Site Pulse Dashboard</h1>
+      </div>
+      <div class="topbar-stats">
+        <div class="stat-box">
+          <p>Next check</p>
+          <strong id="countdown">05:00</strong>
+        </div>
+        <button id="checkNowBtn" class="btn btn-primary" type="button">Check Now</button>
+      </div>
+    </header>
+
+    <section class="panel">
+      <form id="siteForm" class="site-form">
+        <label>
+          Site label
+          <input id="siteName" type="text" placeholder="Marketing Site" required maxlength="40">
+        </label>
+        <label>
+          URL
+          <input id="siteUrl" type="text" placeholder="example.com or https://example.com" required>
+        </label>
+        <button class="btn btn-accent" type="submit">Add Site</button>
+      </form>
+      <label class="proxy-pref" for="proxyPreference">
+        Preferred proxy
+        <select id="proxyPreference"></select>
+      </label>
+      <p id="formMessage" class="form-message" role="status" aria-live="polite"></p>
+      <pre id="debugDetails" class="debug-details" hidden></pre>
+      <p class="hint">Checks run every 5 minutes using a public CORS proxy endpoint, so results are best-effort.</p>
+    </section>
+
+    <section id="cards" class="cards" aria-live="polite"></section>
+  </main>
+
+  <template id="cardTemplate">
+    <article class="card">
+      <header>
+        <h2 class="site-name"></h2>
+        <span class="pill">Unknown</span>
+      </header>
+      <p class="site-url"></p>
+      <div class="card-grid">
+        <div>
+          <p class="k">Latency</p>
+          <p class="v latency">-</p>
+        </div>
+        <div>
+          <p class="k">HTTP</p>
+          <p class="v code">-</p>
+        </div>
+        <div>
+          <p class="k">Last check</p>
+          <p class="v checked">Never</p>
+        </div>
+      </div>
+      <p class="message">Waiting for first check.</p>
+      <div class="card-actions">
+        <button class="btn btn-ghost refresh" type="button">Refresh</button>
+        <button class="btn btn-danger remove" type="button">Remove</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
