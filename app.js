@@ -1,7 +1,7 @@
 const STORAGE_KEY = "site-pulse-dashboard-sites";
 const PROXY_PREF_KEY = "site-pulse-proxy-preference";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 8000;
+const REQUEST_TIMEOUT_MS = 15000; // Increase to 15 seconds
 
 const PROXY_PROVIDERS = [
   {
@@ -264,7 +264,7 @@ async function fetchViaProxyWithFallback(url) {
 
     try {
       const response = await fetch(provider.buildUrl(url), {
-        method: "GET",
+        method: "GET", 
         cache: "no-store",
         signal: controller.signal
       });
@@ -274,6 +274,7 @@ async function fetchViaProxyWithFallback(url) {
       return { response, latencyMs, provider: provider.name };
     } catch (error) {
       clearTimeout(timeout);
+      console.log(`Proxy ${provider.name} failed:`, error);
       lastError = new Error(`${provider.name}: ${getErrorText(error)}`);
     }
   }
