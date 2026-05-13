@@ -164,6 +164,17 @@ select {
   font-size: 0.84rem;
 }
 
+.app-footer {
+  margin-top: 2rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.app-footer p {
+  margin: 0;
+}
+
 .form-message {
   min-height: 1.1rem;
   margin: 0.55rem 0 0;
