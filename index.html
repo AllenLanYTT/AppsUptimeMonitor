@@ -51,6 +51,12 @@
     </section>
 
     <section id="cards" class="cards" aria-live="polite"></section>
+
+    <footer class="build-meta" aria-live="polite">
+      <span id="buildNumber">Build -</span>
+      <span class="dot" aria-hidden="true">•</span>
+      <span id="buildTimestamp">Timestamp -</span>
+    </footer>
   </main>
 
   <template id="cardTemplate">
@@ -60,6 +66,7 @@
         <span class="pill">Unknown</span>
       </header>
       <p class="site-url"></p>
+      <p class="site-comment" hidden></p>
       <div class="card-grid">
         <div>
           <p class="k">Latency</p>
@@ -85,10 +92,6 @@
       </div>
     </article>
   </template>
-
-  <footer class="app-footer">
-    <p>Build #1.0.0 - Built on May 13, 2026 at 12:00:00 UTC</p>
-  </footer>
 
   <script src="app.js" defer></script>
 </body>
