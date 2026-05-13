@@ -235,6 +235,7 @@ function renderCards() {
     card.querySelector(".latency").textContent = result?.latencyMs ? `${result.latencyMs} ms` : "-";
     card.querySelector(".code").textContent = result?.statusCode ?? "-";
     card.querySelector(".checked").textContent = formatTime(result?.checkedAt);
+    card.querySelector(".provider").textContent = result?.provider ?? "-";
     card.querySelector(".message").textContent = result?.message ?? "Waiting for first check.";
 
     const refreshBtn = card.querySelector(".refresh");
@@ -295,6 +296,7 @@ async function checkSite(site) {
       ok: response.ok,
       statusCode: response.status,
       latencyMs,
+      provider,
       checkedAt: Date.now(),
       inFlight: false,
       message: response.ok
