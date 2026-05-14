@@ -238,15 +238,12 @@ function notifySiteStatusChange(site, previousResult, currentResult) {
   const previousStatus = getResultStatus(previousResult);
   const currentStatus = getResultStatus(currentResult);
 
-  if (previousStatus === currentStatus) {
-    return;
-  }
-
   if (currentStatus === "down") {
     const body = `${site.url}\n${currentResult.message ?? "Site is unreachable."}`;
     sendBrowserNotification(`${site.name} is down`, {
       body,
-      tag: site.id
+      tag: site.id,
+      renotify: true
     });
     return;
   }
