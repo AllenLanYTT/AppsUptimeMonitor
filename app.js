@@ -41,6 +41,7 @@ const els = {
   siteName: document.getElementById("siteName"),
   siteUrl: document.getElementById("siteUrl"),
   proxyPreference: document.getElementById("proxyPreference"),
+  enableNotificationsBtn: document.getElementById("enableNotificationsBtn"),
   formMessage: document.getElementById("formMessage"),
   debugDetails: document.getElementById("debugDetails"),
   buildNumber: document.getElementById("buildNumber"),
@@ -181,6 +182,82 @@ function getErrorText(error) {
   }
 
   return String(error);
+}
+
+function canUseBrowserNotifications() {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+function isBrowserNotificationPermissionGranted() {
+  return canUseBrowserNotifications() && Notification.permission === "granted";
+}
+
+async function requestBrowserNotificationPermission() {
+  if (!canUseBrowserNotifications()) {
+    return false;
+  }
+
+  if (Notification.permission === "granted") {
+    return true;
+  }
+
+  if (Notification.permission === "denied") {
+    return false;
+  }
+
+  const permission = await Notification.requestPermission();
+  return permission === "granted";
+}
+
+function sendBrowserNotification(title, options = {}) {
+  if (!isBrowserNotificationPermissionGranted()) {
+    return false;
+  }
+
+  try {
+    new Notification(title, options);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getResultStatus(result) {
+  if (!result) {
+    return "unknown";
+  }
+
+  if (result.inFlight && typeof result.ok !== "boolean") {
+    return "unknown";
+  }
+
+  return result.ok ? "up" : "down";
+}
+
+function notifySiteStatusChange(site, previousResult, currentResult) {
+  const previousStatus = getResultStatus(previousResult);
+  const currentStatus = getResultStatus(currentResult);
+
+  if (previousStatus === currentStatus) {
+    return;
+  }
+
+  if (currentStatus === "down") {
+    const body = `${site.url}\n${currentResult.message ?? "Site is unreachable."}`;
+    sendBrowserNotification(`${site.name} is down`, {
+      body,
+      tag: site.id
+    });
+    return;
+  }
+
+  if (previousStatus === "down" && currentStatus === "up") {
+    const body = `${site.url}\n${currentResult.message ?? "Site is back online."}`;
+    sendBrowserNotification(`${site.name} is back up`, {
+      body,
+      tag: site.id
+    });
+  }
 }
 
 function setDebugDetails(source, error) {
@@ -418,8 +495,10 @@ async function fetchViaProxyWithFallback(url) {
 }
 
 async function checkSite(site) {
+  const previousResult = state.results[site.id];
+
   state.results[site.id] = {
-    ...(state.results[site.id] ?? {}),
+    ...(previousResult ?? {}),
     inFlight: true,
     message: "Checking..."
   };
@@ -428,7 +507,7 @@ async function checkSite(site) {
   try {
     const { response, latencyMs, provider } = await fetchViaProxyWithFallback(site.url);
 
-    state.results[site.id] = {
+    const updatedResult = {
       ok: response.ok,
       statusCode: response.status,
       latencyMs,
@@ -439,8 +518,11 @@ async function checkSite(site) {
         ? `Endpoint reachable via ${provider}.`
         : `${provider} responded with ${response.status}.`
     };
+
+    state.results[site.id] = updatedResult;
+    notifySiteStatusChange(site, previousResult, updatedResult);
   } catch (error) {
-    state.results[site.id] = {
+    const updatedResult = {
       ok: false,
       statusCode: "ERR",
       latencyMs: null,
@@ -448,6 +530,9 @@ async function checkSite(site) {
       inFlight: false,
       message: `All proxy attempts failed: ${getErrorText(error)}`
     };
+
+    state.results[site.id] = updatedResult;
+    notifySiteStatusChange(site, previousResult, updatedResult);
   } finally {
     renderCards();
   }
@@ -580,6 +665,33 @@ async function init() {
       clearDebugDetails();
       setFormMessage(`Preferred proxy set to ${nextValue}.`, "success");
     });
+  }
+
+  if (els.enableNotificationsBtn) {
+    if (!canUseBrowserNotifications()) {
+      els.enableNotificationsBtn.hidden = true;
+    } else {
+      const updateButtonText = () => {
+        els.enableNotificationsBtn.textContent = isBrowserNotificationPermissionGranted()
+          ? "Notifications enabled"
+          : "Enable notifications";
+        els.enableNotificationsBtn.disabled = Notification.permission === "denied";
+      };
+
+      updateButtonText();
+      els.enableNotificationsBtn.addEventListener("click", async () => {
+        const granted = await requestBrowserNotificationPermission();
+        updateButtonText();
+        if (granted) {
+          setFormMessage("OS notifications are enabled.", "success");
+        } else {
+          setFormMessage(
+            "Notifications were denied or are unavailable. Check browser settings.",
+            "error"
+          );
+        }
+      });
+    }
   }
 
   els.checkNowBtn.addEventListener("click", runAllChecks);
