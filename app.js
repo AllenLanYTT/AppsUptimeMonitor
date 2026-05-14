@@ -1,13 +1,13 @@
 const STORAGE_KEY = "site-pulse-dashboard-sites";
 const PROXY_PREF_KEY = "site-pulse-proxy-preference";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
-const REQUEST_TIMEOUT_MS = 15000; // Increase to 15 seconds
+const REQUEST_TIMEOUT_MS = 15000;
+const RETRYABLE_PROXY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const SITES_FILE_PATH = "sites.json";
+const BUILD_NUMBER = "5399d24";
+const BUILD_TIMESTAMP = "Wed, 13 May 2026 20:51:36 GMT";
 
 const PROXY_PROVIDERS = [
-  {
-    name: "Direct",
-    buildUrl: (targetUrl) => targetUrl
-  },
   {
     name: "AllOrigins",
     buildUrl: (targetUrl) => `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`
@@ -22,14 +22,8 @@ const PROXY_PROVIDERS = [
   }
 ];
 
-const defaultSites = [
-  { id: crypto.randomUUID(), name: "GitHub", url: "https://github.com" },
-  { id: crypto.randomUUID(), name: "Microsoft", url: "https://www.microsoft.com" },
-  { id: crypto.randomUUID(), name: "Cloudflare", url: "https://www.cloudflare.com" }
-];
-
 const state = {
-  sites: loadSites(),
+  sites: loadSitesFromStorage(),
   results: {},
   isCheckingAll: false,
   preferredProxy: loadPreferredProxy(),
@@ -46,8 +40,20 @@ const els = {
   proxyPreference: document.getElementById("proxyPreference"),
   formMessage: document.getElementById("formMessage"),
   debugDetails: document.getElementById("debugDetails"),
+  buildNumber: document.getElementById("buildNumber"),
+  buildTimestamp: document.getElementById("buildTimestamp"),
   cardTemplate: document.getElementById("cardTemplate")
 };
+
+function renderBuildMeta() {
+  if (els.buildNumber) {
+    els.buildNumber.textContent = `Build ${BUILD_NUMBER}`;
+  }
+
+  if (els.buildTimestamp) {
+    els.buildTimestamp.textContent = `Timestamp ${BUILD_TIMESTAMP}`;
+  }
+}
 
 function loadPreferredProxy() {
   try {
@@ -95,28 +101,57 @@ function syncProxyPreferenceUi() {
   els.proxyPreference.value = state.preferredProxy;
 }
 
-function loadSites() {
+function toSiteModel(item) {
+  if (!item || !item.url) {
+    return null;
+  }
+
+  const nameValue = item.name ?? item.label;
+  const normalizedName = String(nameValue ?? "").trim();
+  const normalizedUrl = parseWebsiteUrl(String(item.url));
+
+  if (!normalizedName || !normalizedUrl) {
+    return null;
+  }
+
+  return {
+    id: typeof item.id === "string" && item.id.trim() ? item.id : crypto.randomUUID(),
+    name: normalizedName,
+    url: normalizedUrl,
+    comment: typeof item.comment === "string" ? item.comment.trim() : ""
+  };
+}
+
+function loadSitesFromStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      return [...defaultSites];
+      return [];
     }
 
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-      return [...defaultSites];
+    if (!Array.isArray(parsed)) {
+      return [];
     }
 
-    return parsed
-      .filter((item) => item && item.id && item.name && item.url)
-      .map((item) => ({
-        id: item.id,
-        name: String(item.name).trim(),
-        url: normalizeUrl(String(item.url))
-      }));
+    return parsed.map(toSiteModel).filter((item) => item !== null);
   } catch {
-    return [...defaultSites];
+    return [];
   }
+}
+
+async function loadSitesFromFile() {
+  const response = await fetch(SITES_FILE_PATH, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error(`sites.json returned ${response.status}`);
+  }
+
+  const parsed = await response.json();
+  if (!Array.isArray(parsed)) {
+    throw new Error("sites.json must contain an array.");
+  }
+
+  return parsed.map(toSiteModel).filter((item) => item !== null);
 }
 
 function saveSites() {
@@ -228,6 +263,16 @@ function renderCards() {
     card.querySelector(".site-name").textContent = site.name;
     card.querySelector(".site-url").textContent = site.url;
 
+    const siteComment = card.querySelector(".site-comment");
+    const commentText = site.comment?.trim();
+    if (commentText) {
+      siteComment.textContent = commentText;
+      siteComment.hidden = false;
+    } else {
+      siteComment.textContent = "";
+      siteComment.hidden = true;
+    }
+
     const pill = card.querySelector(".pill");
     pill.textContent = status.text;
     pill.classList.add(status.className);
@@ -264,17 +309,23 @@ async function fetchViaProxyWithFallback(url) {
 
     try {
       const response = await fetch(provider.buildUrl(url), {
-        method: "GET", 
+        method: "GET",
         cache: "no-store",
         signal: controller.signal
       });
 
       clearTimeout(timeout);
       const latencyMs = Math.round(performance.now() - start);
+
+      // Retry with next proxy when the current proxy is timing out, rate-limited, or unhealthy.
+      if (RETRYABLE_PROXY_STATUS.has(response.status)) {
+        lastError = new Error(`${provider.name}: HTTP ${response.status}`);
+        continue;
+      }
+
       return { response, latencyMs, provider: provider.name };
     } catch (error) {
       clearTimeout(timeout);
-      console.log(`Proxy ${provider.name} failed:`, error);
       lastError = new Error(`${provider.name}: ${getErrorText(error)}`);
     }
   }
@@ -382,7 +433,8 @@ function handleAddSite(event) {
     state.sites.unshift({
       id: crypto.randomUUID(),
       name,
-      url
+      url,
+      comment: ""
     });
 
     renderCards();
@@ -403,9 +455,27 @@ function handleAddSite(event) {
   }
 }
 
-function init() {
-  renderCards();
+async function init() {
+  renderBuildMeta();
   syncProxyPreferenceUi();
+
+  if (state.sites.length === 0) {
+    try {
+      state.sites = await loadSitesFromFile();
+      const persisted = saveSites();
+      if (!persisted.ok) {
+        setFormMessage("Loaded default sites, but browser storage is blocked.", "error");
+        setDebugDetails("saveSites() failed while caching defaults", persisted.error);
+      } else {
+        clearDebugDetails();
+      }
+    } catch (error) {
+      setFormMessage("Unable to load default sites from sites.json.", "error");
+      setDebugDetails("loadSitesFromFile() failed", error);
+    }
+  }
+
+  renderCards();
 
   if (els.proxyPreference) {
     els.proxyPreference.addEventListener("change", (event) => {
