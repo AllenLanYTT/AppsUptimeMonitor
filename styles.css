@@ -248,10 +248,16 @@ select {
 }
 
 .pill {
+  display: inline-block;
   font-size: 0.72rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   padding: 0.22rem 0.55rem;
+  vertical-align: middle;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .pill.up {
@@ -264,6 +270,20 @@ select {
   color: var(--down);
   border-color: rgba(191, 63, 47, 0.35);
   background: rgba(191, 63, 47, 0.1);
+}
+
+/* High-contrast flash: works even when the OS has "reduce motion" enabled. */
+.pill.down.pill-down-flash-hit {
+  color: #fff;
+  background: #bf3f2f;
+  border-color: #7a2a20;
+  box-shadow: 0 0 0 4px rgba(191, 63, 47, 0.5);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pill.down.pill-down-flash-hit {
+    transform: scale(1.06);
+  }
 }
 
 .pill.unknown {

@@ -2,6 +2,9 @@ const STORAGE_KEY = "site-pulse-dashboard-sites";
 const PROXY_PREF_KEY = "site-pulse-proxy-preference";
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 15000;
+const DOWN_PILL_FLASH_MS = 2000;
+const DOWN_PILL_FLASH_HOLD_MS = 650;
+const TAB_TITLE_ALERT_INTERVAL_MS = 2000;
 const RETRYABLE_PROXY_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const SITES_FILE_PATH = "sites.json";
 const BUILD_NUMBER = "5399d24";
@@ -44,6 +47,11 @@ const els = {
   buildTimestamp: document.getElementById("buildTimestamp"),
   cardTemplate: document.getElementById("cardTemplate")
 };
+
+const BASE_PAGE_TITLE = document.title;
+
+let tabTitleAlertIntervalId = null;
+let tabTitleAlertShowPing = false;
 
 function renderBuildMeta() {
   if (els.buildNumber) {
@@ -245,11 +253,64 @@ function getStatusLabel(result) {
     return { text: "Unknown", className: "unknown" };
   }
 
+  if (result.inFlight && typeof result.ok !== "boolean") {
+    return { text: "Unknown", className: "unknown" };
+  }
+
   if (result.ok) {
     return { text: "Up", className: "up" };
   }
 
   return { text: "Down", className: "down" };
+}
+
+function isResultConclusivelyDown(result) {
+  if (!result) {
+    return false;
+  }
+
+  if (result.inFlight && typeof result.ok !== "boolean") {
+    return false;
+  }
+
+  return result.ok === false;
+}
+
+function hasAnyDownSite() {
+  return state.sites.some((site) => isResultConclusivelyDown(state.results[site.id]));
+}
+
+function stopTabTitleAlert() {
+  if (tabTitleAlertIntervalId !== null) {
+    clearInterval(tabTitleAlertIntervalId);
+    tabTitleAlertIntervalId = null;
+  }
+
+  document.title = BASE_PAGE_TITLE;
+}
+
+function tickTabTitleAlert() {
+  tabTitleAlertShowPing = !tabTitleAlertShowPing;
+  document.title = tabTitleAlertShowPing ? `[DOWN] ${BASE_PAGE_TITLE}` : BASE_PAGE_TITLE;
+}
+
+function startTabTitleAlert() {
+  if (tabTitleAlertIntervalId !== null) {
+    return;
+  }
+
+  tabTitleAlertShowPing = false;
+  tickTabTitleAlert();
+  tabTitleAlertIntervalId = window.setInterval(tickTabTitleAlert, TAB_TITLE_ALERT_INTERVAL_MS);
+}
+
+function syncTabTitleAlert() {
+  if (!hasAnyDownSite()) {
+    stopTabTitleAlert();
+    return;
+  }
+
+  startTabTitleAlert();
 }
 
 function renderCards() {
@@ -276,6 +337,7 @@ function renderCards() {
     const pill = card.querySelector(".pill");
     pill.textContent = status.text;
     pill.classList.add(status.className);
+    pill.setAttribute("aria-label", status.text);
 
     card.querySelector(".latency").textContent = result?.latencyMs ? `${result.latencyMs} ms` : "-";
     card.querySelector(".code").textContent = result?.statusCode ?? "-";
@@ -291,6 +353,28 @@ function renderCards() {
     removeBtn.addEventListener("click", () => removeSite(site.id));
 
     els.cards.appendChild(card);
+  }
+
+  queueMicrotask(() => flashDownStatusPills());
+  syncTabTitleAlert();
+}
+
+function flashDownStatusPills() {
+  const root = els.cards;
+  if (!root) {
+    return;
+  }
+
+  const pills = root.querySelectorAll(".pill.down");
+  for (const pill of pills) {
+    pill.classList.remove("pill-down-flash-hit");
+    void pill.offsetWidth;
+    pill.classList.add("pill-down-flash-hit");
+    window.setTimeout(() => {
+      if (pill.isConnected) {
+        pill.classList.remove("pill-down-flash-hit");
+      }
+    }, DOWN_PILL_FLASH_HOLD_MS);
   }
 }
 
@@ -508,6 +592,9 @@ async function init() {
       runAllChecks();
     }
   }, 1000);
+
+  setInterval(flashDownStatusPills, DOWN_PILL_FLASH_MS);
+  window.setTimeout(flashDownStatusPills, 600);
 
   runAllChecks();
 }
